@@ -6,7 +6,7 @@ import type { EventGenre, EventPricing, EventStatus } from '@/lib/database.types
  * Includes club name join via `clubs(name)` for display convenience.
  */
 
-const supabase = createClient();
+const getClient = () => createClient();
 
 /** Shape of an event row with the joined club name */
 export interface EventWithClub {
@@ -59,7 +59,7 @@ export async function fetchEvents(filters?: {
   clubId?: string;
   genre?: EventGenre;
 }) {
-  let query = supabase
+  let query = getClient()
     .from('events')
     .select('*, clubs(name)')
     .order('date', { ascending: true });
@@ -81,7 +81,7 @@ export async function fetchEvents(filters?: {
 
 /** Fetch a single event by ID */
 export async function fetchEventById(eventId: string) {
-  const { data, error } = await supabase
+  const { data, error } = await getClient()
     .from('events')
     .select('*, clubs(name)')
     .eq('id', eventId)
@@ -105,7 +105,7 @@ export async function createEvent(event: {
   registration_limit?: number | null;
   created_by?: string | null;
 }) {
-  const { data, error } = await supabase
+  const { data, error } = await getClient()
     .from('events')
     .insert({
       ...event,
@@ -134,7 +134,7 @@ export async function updateEvent(
     status?: EventStatus;
   }
 ) {
-  const { data, error } = await supabase
+  const { data, error } = await getClient()
     .from('events')
     .update(updates)
     .eq('id', eventId)
@@ -147,7 +147,7 @@ export async function updateEvent(
 
 /** Delete an event (admin only — enforced by RLS) */
 export async function deleteEvent(eventId: string) {
-  const { error } = await supabase
+  const { error } = await getClient()
     .from('events')
     .delete()
     .eq('id', eventId);
@@ -167,7 +167,7 @@ export async function rejectEvent(eventId: string) {
 
 /** Get the registration count for an event */
 export async function getRegistrationCount(eventId: string) {
-  const { count, error } = await supabase
+  const { count, error } = await getClient()
     .from('registrations')
     .select('*', { count: 'exact', head: true })
     .eq('event_id', eventId);

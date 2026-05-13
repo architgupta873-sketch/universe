@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client';
  * Buckets: event-posters, club-banners, avatars
  */
 
-const supabase = createClient();
+const getClient = () => createClient();
 
 /** Upload a file to a storage bucket */
 async function uploadFile(
@@ -13,7 +13,7 @@ async function uploadFile(
   path: string,
   file: File
 ): Promise<string> {
-  const { error } = await supabase.storage
+  const { error } = await getClient().storage
     .from(bucket)
     .upload(path, file, {
       cacheControl: '3600',
@@ -26,7 +26,7 @@ async function uploadFile(
 
 /** Get the public URL for a file in a bucket */
 export function getPublicUrl(bucket: string, path: string): string {
-  const { data } = supabase.storage.from(bucket).getPublicUrl(path);
+  const { data } = getClient().storage.from(bucket).getPublicUrl(path);
   return data.publicUrl;
 }
 
@@ -53,6 +53,6 @@ export async function uploadAvatar(file: File, userId: string): Promise<string> 
 
 /** Delete a file from a bucket */
 export async function deleteFile(bucket: string, path: string) {
-  const { error } = await supabase.storage.from(bucket).remove([path]);
+  const { error } = await getClient().storage.from(bucket).remove([path]);
   if (error) throw error;
 }

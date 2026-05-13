@@ -5,11 +5,11 @@ import { createClient } from '@/lib/supabase/client';
  * Club data is relatively static so we fetch all clubs at once.
  */
 
-const supabase = createClient();
+const getClient = () => createClient();
 
 /** Fetch all clubs ordered by name */
 export async function fetchClubs() {
-  const { data, error } = await supabase
+  const { data, error } = await getClient()
     .from('clubs')
     .select('*')
     .order('name', { ascending: true });
@@ -20,7 +20,7 @@ export async function fetchClubs() {
 
 /** Fetch a single club by ID */
 export async function fetchClubById(clubId: string) {
-  const { data, error } = await supabase
+  const { data, error } = await getClient()
     .from('clubs')
     .select('*')
     .eq('id', clubId)
@@ -32,7 +32,7 @@ export async function fetchClubById(clubId: string) {
 
 /** Create a new club (admin only — enforced by RLS) */
 export async function createClub(name: string, description: string = '') {
-  const { data, error } = await supabase
+  const { data, error } = await getClient()
     .from('clubs')
     .insert({ name, description })
     .select()
@@ -47,7 +47,7 @@ export async function updateClub(
   clubId: string,
   updates: { name?: string; description?: string; banner_url?: string | null }
 ) {
-  const { data, error } = await supabase
+  const { data, error } = await getClient()
     .from('clubs')
     .update(updates)
     .eq('id', clubId)
@@ -60,7 +60,7 @@ export async function updateClub(
 
 /** Delete a club (admin only — enforced by RLS) */
 export async function deleteClub(clubId: string) {
-  const { error } = await supabase
+  const { error } = await getClient()
     .from('clubs')
     .delete()
     .eq('id', clubId);

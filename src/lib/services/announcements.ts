@@ -4,11 +4,11 @@ import { createClient } from '@/lib/supabase/client';
  * Announcements service — CRUD for club announcements.
  */
 
-const supabase = createClient();
+const getClient = () => createClient();
 
 /** Fetch all announcements, optionally filtered by club */
 export async function fetchAnnouncements(clubId?: string) {
-  let query = supabase
+  let query = getClient()
     .from('announcements')
     .select('*, clubs(name), profiles(full_name)')
     .order('created_at', { ascending: false });
@@ -29,7 +29,7 @@ export async function createAnnouncement(announcement: {
   content: string;
   created_by?: string | null;
 }) {
-  const { data, error } = await supabase
+  const { data, error } = await getClient()
     .from('announcements')
     .insert({
       club_id: announcement.club_id,
@@ -46,7 +46,7 @@ export async function createAnnouncement(announcement: {
 
 /** Delete an announcement */
 export async function deleteAnnouncement(announcementId: string) {
-  const { error } = await supabase
+  const { error } = await getClient()
     .from('announcements')
     .delete()
     .eq('id', announcementId);

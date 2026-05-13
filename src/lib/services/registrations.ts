@@ -5,12 +5,12 @@ import { createClient } from '@/lib/supabase/client';
  * and reward point accounting.
  */
 
-const supabase = createClient();
+const getClient = () => createClient();
 
 /** Register a user for an event and award points */
 export async function registerForEvent(eventId: string, userId: string) {
   // 1. Insert registration row
-  const { error: regError } = await supabase
+  const { error: regError } = await getClient()
     .from('registrations')
     .insert({ event_id: eventId, user_id: userId });
 
@@ -23,7 +23,7 @@ export async function registerForEvent(eventId: string, userId: string) {
   }
 
   // 2. Fetch event reward_points to award to the user
-  const { data: event } = await supabase
+  const { data: event } = await getClient()
     .from('events')
     .select('reward_points')
     .eq('id', eventId)
@@ -31,14 +31,14 @@ export async function registerForEvent(eventId: string, userId: string) {
 
   if (event?.reward_points) {
     // Increment user points using RPC or direct update
-    const { data: profile } = await supabase
+    const { data: profile } = await getClient()
       .from('profiles')
       .select('points')
       .eq('id', userId)
       .single();
 
     if (profile) {
-      await supabase
+      await getClient()
         .from('profiles')
         .update({ points: profile.points + event.reward_points })
         .eq('id', userId);
@@ -49,14 +49,14 @@ export async function registerForEvent(eventId: string, userId: string) {
 /** Unregister a user from an event and deduct points */
 export async function unregisterFromEvent(eventId: string, userId: string) {
   // 1. Fetch event reward_points to deduct
-  const { data: event } = await supabase
+  const { data: event } = await getClient()
     .from('events')
     .select('reward_points')
     .eq('id', eventId)
     .single();
 
   // 2. Delete registration row
-  const { error } = await supabase
+  const { error } = await getClient()
     .from('registrations')
     .delete()
     .eq('event_id', eventId)
@@ -66,14 +66,14 @@ export async function unregisterFromEvent(eventId: string, userId: string) {
 
   // 3. Deduct points
   if (event?.reward_points) {
-    const { data: profile } = await supabase
+    const { data: profile } = await getClient()
       .from('profiles')
       .select('points')
       .eq('id', userId)
       .single();
 
     if (profile) {
-      await supabase
+      await getClient()
         .from('profiles')
         .update({ points: Math.max(0, profile.points - event.reward_points) })
         .eq('id', userId);
@@ -83,7 +83,7 @@ export async function unregisterFromEvent(eventId: string, userId: string) {
 
 /** Get all event IDs that a user is registered for */
 export async function getUserRegisteredEventIds(userId: string): Promise<string[]> {
-  const { data, error } = await supabase
+  const { data, error } = await getClient()
     .from('registrations')
     .select('event_id')
     .eq('user_id', userId);
@@ -94,7 +94,7 @@ export async function getUserRegisteredEventIds(userId: string): Promise<string[
 
 /** Get all registrations for a specific event (for club dashboard) */
 export async function getEventRegistrations(eventId: string) {
-  const { data, error } = await supabase
+  const { data, error } = await getClient()
     .from('registrations')
     .select('*, profiles(full_name, email)')
     .eq('event_id', eventId)
@@ -106,7 +106,7 @@ export async function getEventRegistrations(eventId: string) {
 
 /** Get full registered events for a user (with event details) */
 export async function getUserRegistrations(userId: string) {
-  const { data, error } = await supabase
+  const { data, error } = await getClient()
     .from('registrations')
     .select('*, events(*, clubs(name))')
     .eq('user_id', userId)

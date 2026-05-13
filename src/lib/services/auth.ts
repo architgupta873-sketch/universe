@@ -9,7 +9,7 @@ import { createClient } from '@/lib/supabase/client';
  * and assigns 'admin' only to the configured admin email.
  */
 
-const supabase = createClient();
+const getClient = () => createClient();
 
 /** Sign up a new user with email and password.
  *  Role is ALWAYS determined server-side by the DB trigger — not by the client.
@@ -21,7 +21,7 @@ export async function signUp(
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   _role: string = 'student' // ignored — DB trigger assigns role by email
 ) {
-  const { data, error } = await supabase.auth.signUp({
+  const { data, error } = await getClient().auth.signUp({
     email,
     password,
     options: {
@@ -37,7 +37,7 @@ export async function signUp(
 
 /** Sign in with email and password */
 export async function signIn(email: string, password: string) {
-  const { data, error } = await supabase.auth.signInWithPassword({
+  const { data, error } = await getClient().auth.signInWithPassword({
     email,
     password,
   });
@@ -48,27 +48,27 @@ export async function signIn(email: string, password: string) {
 
 /** Sign out the current user */
 export async function signOut() {
-  const { error } = await supabase.auth.signOut();
+  const { error } = await getClient().auth.signOut();
   if (error) throw error;
 }
 
 /** Get the current session */
 export async function getSession() {
-  const { data, error } = await supabase.auth.getSession();
+  const { data, error } = await getClient().auth.getSession();
   if (error) throw error;
   return data.session;
 }
 
 /** Get the current user */
 export async function getUser() {
-  const { data, error } = await supabase.auth.getUser();
+  const { data, error } = await getClient().auth.getUser();
   if (error) throw error;
   return data.user;
 }
 
 /** Fetch the profile for a given user ID */
 export async function getProfile(userId: string) {
-  const { data, error } = await supabase
+  const { data, error } = await getClient()
     .from('profiles')
     .select('*')
     .eq('id', userId)
@@ -86,7 +86,7 @@ export async function updateProfile(
     avatar_url?: string | null;
   }
 ) {
-  const { data, error } = await supabase
+  const { data, error } = await getClient()
     .from('profiles')
     .update(updates)
     .eq('id', userId)
@@ -101,5 +101,5 @@ export async function updateProfile(
 export function onAuthStateChange(
   callback: (event: string, session: unknown) => void
 ) {
-  return supabase.auth.onAuthStateChange(callback);
+  return getClient().auth.onAuthStateChange(callback);
 }

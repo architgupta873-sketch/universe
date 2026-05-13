@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from "react";
 import confetti from "canvas-confetti";
+import { useRouter } from "next/navigation";
 import { Event, useAppContext } from "@/context/AppContext";
 
 interface EventCardProps {
@@ -109,9 +110,10 @@ const CATEGORY_THEME: Record<string, {
 const DEFAULT_THEME = CATEGORY_THEME.Technical;
 
 export default function EventCard({ event, onCardClick, soonLabel }: EventCardProps) {
-  const { registeredEventIds, registerForEvent, unregisterFromEvent } = useAppContext();
+  const { registeredEventIds, registerForEvent, unregisterFromEvent, role } = useAppContext();
   const isRegistered = registeredEventIds.includes(event.id);
   const [justRegistered, setJustRegistered] = useState(false);
+  const router = useRouter();
 
   const theme = CATEGORY_THEME[event.genre] || DEFAULT_THEME;
 
@@ -140,6 +142,10 @@ export default function EventCard({ event, onCardClick, soonLabel }: EventCardPr
 
   const handleRegisterClick = (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (!role) {
+      router.push("/login");
+      return;
+    }
     if (isRegistered) return;
     registerForEvent(event.id);
     setJustRegistered(true);

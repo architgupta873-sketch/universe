@@ -3,6 +3,7 @@
 import { Event, useAppContext } from "@/context/AppContext";
 import { useEffect, useState, useCallback, useRef } from "react";
 import confetti from "canvas-confetti";
+import Link from "next/link";
 
 interface EventDetailModalProps {
   event: Event;
@@ -114,21 +115,17 @@ export default function EventDetailModal({ event, onClose }: EventDetailModalPro
     setTimeout(() => onClose(), 200);
   }, [onClose]);
 
-  // Lock body scroll while modal is open (iOS-safe)
+  // Lock body scroll while modal is open
   useEffect(() => {
-    const scrollY = window.scrollY;
-    document.body.style.position = "fixed";
-    document.body.style.top = `-${scrollY}px`;
-    document.body.style.left = "0";
-    document.body.style.right = "0";
+    const scrollBarWidth = window.innerWidth - document.documentElement.clientWidth;
+    document.documentElement.style.overflow = "hidden";
     document.body.style.overflow = "hidden";
+    // Prevent layout shift from scrollbar disappearing
+    document.body.style.paddingRight = `${scrollBarWidth}px`;
     return () => {
-      document.body.style.position = "";
-      document.body.style.top = "";
-      document.body.style.left = "";
-      document.body.style.right = "";
+      document.documentElement.style.overflow = "";
       document.body.style.overflow = "";
-      window.scrollTo(0, scrollY);
+      document.body.style.paddingRight = "";
     };
   }, []);
 
@@ -175,9 +172,9 @@ export default function EventDetailModal({ event, onClose }: EventDetailModalPro
   const getRegisterButton = () => {
     if (!role) {
       return (
-        <a href="/login" className="btn-primary text-sm py-2.5 w-full text-center block">
+        <Link href="/login" className="btn-primary text-sm py-2.5 w-full text-center block">
           Login to Register
-        </a>
+        </Link>
       );
     }
     if (isPastEvent) {
