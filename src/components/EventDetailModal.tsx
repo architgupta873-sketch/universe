@@ -1,7 +1,7 @@
 "use client";
 
 import { Event, useAppContext } from "@/context/AppContext";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import confetti from "canvas-confetti";
 
 interface EventDetailModalProps {
@@ -42,12 +42,31 @@ const CATEGORY_ICONS: Record<string, { color: string; bg: string; border: string
 };
 
 export default function EventDetailModal({ event, onClose }: EventDetailModalProps) {
-  const { registeredEventIds, registerForEvent, unregisterFromEvent } = useAppContext();
+  const { registeredEventIds, registerForEvent, unregisterFromEvent, role } = useAppContext();
   const isRegistered = registeredEventIds.includes(event.id);
   const [justRegistered, setJustRegistered] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [isUnregistering, setIsUnregistering] = useState(false);
+  const [regError, setRegError] = useState<string | null>(null);
+  const [isClosing, setIsClosing] = useState(false);
+  const overlayRef = useRef<HTMLDivElement>(null);
 
   const catTheme = CATEGORY_ICONS[event.genre] || CATEGORY_ICONS.Technical;
+
+  // Check if event is in the past
+  const isPastEvent = (() => {
+    const eventDate = new Date(event.date);
+    eventDate.setHours(23, 59, 59, 999);
+    return eventDate < new Date();
+  })();
+
+  // Check if registration is full (capacity reached)
+  // Note: this is a frontend hint — the backend also validates
+  const isCapacityFull = event.registration_limit !== null &&
+    event.registration_limit !== undefined &&
+    event.registration_limit > 0 &&
+    registeredEventIds.length >= event.registration_limit;
 
   const fireConfetti = useCallback(() => {
     confetti({
@@ -59,29 +78,68 @@ export default function EventDetailModal({ event, onClose }: EventDetailModalPro
     });
   }, []);
 
-  const handleRegister = () => {
-    registerForEvent(event.id);
-    setJustRegistered(true);
-    fireConfetti();
-    setTimeout(() => setJustRegistered(false), 2500);
+  const handleRegister = async () => {
+    if (isRegistering || isRegistered) return;
+    setIsRegistering(true);
+    setRegError(null);
+    try {
+      await registerForEvent(event.id);
+      setJustRegistered(true);
+      fireConfetti();
+      setTimeout(() => setJustRegistered(false), 2500);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Registration failed";
+      setRegError(message);
+    } finally {
+      setIsRegistering(false);
+    }
   };
 
-  // Lock body scroll while modal is open
+  const handleUnregister = async () => {
+    if (isUnregistering) return;
+    setIsUnregistering(true);
+    try {
+      await unregisterFromEvent(event.id);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to unregister";
+      setRegError(message);
+    } finally {
+      setIsUnregistering(false);
+    }
+  };
+
+  // Close with exit animation
+  const handleClose = useCallback(() => {
+    setIsClosing(true);
+    setTimeout(() => onClose(), 200);
+  }, [onClose]);
+
+  // Lock body scroll while modal is open (iOS-safe)
   useEffect(() => {
+    const scrollY = window.scrollY;
+    document.body.style.position = "fixed";
+    document.body.style.top = `-${scrollY}px`;
+    document.body.style.left = "0";
+    document.body.style.right = "0";
     document.body.style.overflow = "hidden";
     return () => {
+      document.body.style.position = "";
+      document.body.style.top = "";
+      document.body.style.left = "";
+      document.body.style.right = "";
       document.body.style.overflow = "";
+      window.scrollTo(0, scrollY);
     };
   }, []);
 
   // Close on Escape key
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") handleClose();
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [onClose]);
+  }, [handleClose]);
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
@@ -113,8 +171,76 @@ export default function EventDetailModal({ event, onClose }: EventDetailModalPro
     }
   };
 
+  // Determine register button state
+  const getRegisterButton = () => {
+    if (!role) {
+      return (
+        <a href="/login" className="btn-primary text-sm py-2.5 w-full text-center block">
+          Login to Register
+        </a>
+      );
+    }
+    if (isPastEvent) {
+      return (
+        <span className="inline-flex items-center gap-1.5 text-sm font-semibold px-5 py-2.5 rounded-xl bg-white/5 text-gray-500 border border-white/10 w-full justify-center cursor-not-allowed">
+          Event has ended
+        </span>
+      );
+    }
+    if (isRegistered) {
+      return (
+        <>
+          <span className="inline-flex items-center gap-1.5 text-sm font-semibold px-5 py-2.5 rounded-xl bg-[#10b981]/15 text-[#34d399] border border-[#10b981]/30 flex-1 justify-center">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+            Registered
+          </span>
+          <button
+            onClick={handleUnregister}
+            disabled={isUnregistering}
+            className="btn-danger text-sm py-2.5 px-5 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isUnregistering ? (
+              <div className="w-4 h-4 border-2 border-red-400 border-t-transparent rounded-full animate-spin" />
+            ) : (
+              "Unregister"
+            )}
+          </button>
+        </>
+      );
+    }
+    if (isCapacityFull) {
+      return (
+        <span className="inline-flex items-center gap-1.5 text-sm font-semibold px-5 py-2.5 rounded-xl bg-[#fbbf24]/10 text-[#fbbf24] border border-[#fbbf24]/25 w-full justify-center cursor-not-allowed">
+          🔒 Registration Full
+        </span>
+      );
+    }
+    return (
+      <button
+        onClick={handleRegister}
+        disabled={isRegistering}
+        className="btn-primary text-sm py-2.5 w-full flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+      >
+        {isRegistering ? (
+          <>
+            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+            Registering...
+          </>
+        ) : (
+          "Register for this Event"
+        )}
+      </button>
+    );
+  };
+
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div
+      ref={overlayRef}
+      className={`modal-overlay ${isClosing ? "closing" : ""}`}
+      onClick={handleClose}
+    >
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         {/* Header accent bar — uses category color */}
         <div
@@ -126,7 +252,7 @@ export default function EventDetailModal({ event, onClose }: EventDetailModalPro
           {/* Close button */}
           <div className="flex justify-end mb-2">
             <button
-              onClick={onClose}
+              onClick={handleClose}
               className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center text-gray-400 hover:text-white transition-all"
               aria-label="Close modal"
             >
@@ -161,6 +287,11 @@ export default function EventDetailModal({ event, onClose }: EventDetailModalPro
                   : "bg-[#ffa502]/10 text-[#ffa502] border-[#ffa502]/25"
               }`}>
                 {event.eventType}
+              </span>
+            )}
+            {isPastEvent && (
+              <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-white/5 text-gray-500 border border-white/10">
+                Past Event
               </span>
             )}
           </div>
@@ -201,6 +332,39 @@ export default function EventDetailModal({ event, onClose }: EventDetailModalPro
                 <p className="text-sm text-white font-medium">{event.venue || "TBA"}</p>
               </div>
             </div>
+
+            {/* Reward Points */}
+            {event.reward_points && event.reward_points > 0 && (
+              <div className="flex items-center gap-3 p-3 rounded-xl bg-white/[0.03] border border-white/5">
+                <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 bg-[#fbbf24]/10 text-[#fbbf24]">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Reward</p>
+                  <p className="text-sm text-white font-medium">{event.reward_points} points</p>
+                </div>
+              </div>
+            )}
+
+            {/* Registration limit */}
+            {event.registration_limit && (
+              <div className="flex items-center gap-3 p-3 rounded-xl bg-white/[0.03] border border-white/5">
+                <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 bg-white/5 text-gray-400">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                    <circle cx="9" cy="7" r="4" />
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Capacity</p>
+                  <p className="text-sm text-white font-medium">{event.registration_limit} seats</p>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Description */}
@@ -236,6 +400,13 @@ export default function EventDetailModal({ event, onClose }: EventDetailModalPro
             </button>
           </div>
 
+          {/* Registration error */}
+          {regError && (
+            <div className="mb-4 p-3 rounded-xl text-sm font-medium text-red-400 bg-red-400/10 border border-red-400/20 animate-fadeInUp">
+              {regError}
+            </div>
+          )}
+
           {/* Success feedback */}
           {justRegistered && (
             <div
@@ -253,29 +424,7 @@ export default function EventDetailModal({ event, onClose }: EventDetailModalPro
 
           {/* Action buttons */}
           <div className="flex items-center gap-3">
-            {isRegistered ? (
-              <>
-                <span className="inline-flex items-center gap-1.5 text-sm font-semibold px-5 py-2.5 rounded-xl bg-[#10b981]/15 text-[#34d399] border border-[#10b981]/30 flex-1 justify-center">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                  Registered
-                </span>
-                <button
-                  onClick={() => unregisterFromEvent(event.id)}
-                  className="btn-danger text-sm py-2.5 px-5"
-                >
-                  Unregister
-                </button>
-              </>
-            ) : (
-              <button
-                onClick={handleRegister}
-                className="btn-primary text-sm py-2.5 w-full"
-              >
-                Register for this Event
-              </button>
-            )}
+            {getRegisterButton()}
           </div>
         </div>
       </div>

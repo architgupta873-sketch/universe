@@ -16,6 +16,7 @@ function AdminPageContent() {
   const [activeTab, setActiveTab] = useState<"clubs" | "events" | "pending">("pending");
   const [userCount, setUserCount] = useState(0);
   const [registrationCount, setRegistrationCount] = useState(0);
+  const [processingId, setProcessingId] = useState<string | null>(null);
 
   // Fetch analytics data
   useEffect(() => {
@@ -71,6 +72,8 @@ function AdminPageContent() {
   };
 
   const handleApprove = async (eventId: string, title: string) => {
+    if (processingId) return;
+    setProcessingId(eventId);
     try {
       await approveEvent(eventId);
       await refreshEvents();
@@ -79,10 +82,14 @@ function AdminPageContent() {
     } catch {
       setToastType("error");
       setToast("Failed to approve event.");
+    } finally {
+      setProcessingId(null);
     }
   };
 
   const handleReject = async (eventId: string, title: string) => {
+    if (processingId) return;
+    setProcessingId(eventId);
     try {
       await rejectEvent(eventId);
       await refreshEvents();
@@ -91,6 +98,8 @@ function AdminPageContent() {
     } catch {
       setToastType("error");
       setToast("Failed to reject event.");
+    } finally {
+      setProcessingId(null);
     }
   };
 
@@ -328,13 +337,18 @@ function AdminPageContent() {
                         <div className="flex items-center gap-2 shrink-0">
                           <button
                             onClick={() => handleApprove(event.id, event.title)}
-                            className="text-xs font-medium px-4 py-2 rounded-lg bg-[#10b981]/15 text-[#34d399] border border-[#10b981]/25 hover:bg-[#10b981]/25 transition-all"
+                            disabled={processingId === event.id}
+                            className="text-xs font-medium px-4 py-2 rounded-lg bg-[#10b981]/15 text-[#34d399] border border-[#10b981]/25 hover:bg-[#10b981]/25 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
                           >
+                            {processingId === event.id ? (
+                              <div className="w-3 h-3 border-2 border-[#34d399] border-t-transparent rounded-full animate-spin" />
+                            ) : null}
                             Approve
                           </button>
                           <button
                             onClick={() => handleReject(event.id, event.title)}
-                            className="text-xs font-medium px-4 py-2 rounded-lg bg-red-400/15 text-red-400 border border-red-400/25 hover:bg-red-400/25 transition-all"
+                            disabled={processingId === event.id}
+                            className="text-xs font-medium px-4 py-2 rounded-lg bg-red-400/15 text-red-400 border border-red-400/25 hover:bg-red-400/25 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             Reject
                           </button>

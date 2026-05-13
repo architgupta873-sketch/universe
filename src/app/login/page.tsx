@@ -28,9 +28,11 @@ export default function LoginPage() {
     try {
       if (mode === "login") {
         await handleSignIn(email, password);
+        // Wait for onAuthStateChange to update profile, then navigate
         setTimeout(() => {
           router.push("/events");
-        }, 300);
+          router.refresh(); // Force re-render to pick up new auth state
+        }, 500);
       } else {
         // Everyone signs up as "student" — admin is assigned by email in the DB trigger
         await handleSignUp(email, password, fullName.trim(), "student");

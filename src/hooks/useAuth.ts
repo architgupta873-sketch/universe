@@ -79,9 +79,11 @@ export function useAuth(): UseAuthReturn {
         setUser(newSession?.user || null);
 
         if (newSession?.user) {
-          // Small delay to allow the trigger to create the profile
           if (event === 'SIGNED_IN') {
-            setTimeout(() => fetchProfile(newSession.user.id), 500);
+            // Fetch immediately — profile may already exist
+            await fetchProfile(newSession.user.id);
+            // Retry after short delay in case the DB trigger hasn't fired yet
+            setTimeout(() => fetchProfile(newSession.user.id), 800);
           } else {
             await fetchProfile(newSession.user.id);
           }
