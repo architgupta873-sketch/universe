@@ -6,22 +6,30 @@ import Toast from "@/components/Toast";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useRef } from "react";
+import { uploadAvatar } from "@/lib/services/storage";
+import { updateProfile } from "@/lib/services/auth";
 
 export default function ProfilePage() {
   const {
     role,
     userName,
     userEmail,
+    userId,
+    userPoints,
+    avatarUrl,
     events,
     registeredEventIds,
     unregisterFromEvent,
+    refreshProfile,
   } = useAppContext();
   const router = useRouter();
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [toastType, setToastType] = useState<"success" | "info" | "error">("info");
   const prevRegistered = useRef(registeredEventIds.length);
+  const [uploading, setUploading] = useState(false);
 
-  // Redirect non-students
+  // Redirect non-authenticated users
   useEffect(() => {
     if (!role) {
       router.replace("/login");
@@ -31,6 +39,7 @@ export default function ProfilePage() {
   // Show toast on unregister
   useEffect(() => {
     if (registeredEventIds.length < prevRegistered.current) {
+      setToastType("info");
       setToast("Successfully unregistered from the event.");
     }
     prevRegistered.current = registeredEventIds.length;
@@ -64,10 +73,29 @@ export default function ProfilePage() {
     return { label: `In ${diff} days`, color: "text-gray-500" };
   };
 
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !userId) return;
+
+    setUploading(true);
+    try {
+      const url = await uploadAvatar(file, userId);
+      await updateProfile(userId, { avatar_url: url });
+      await refreshProfile();
+      setToastType("success");
+      setToast("Profile picture updated! ✨");
+    } catch {
+      setToastType("error");
+      setToast("Failed to upload avatar. Please try again.");
+    } finally {
+      setUploading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen px-4 py-20 page-transition">
       {toast && (
-        <Toast message={toast} type="info" onClose={() => setToast(null)} />
+        <Toast message={toast} type={toastType === "error" ? "error" : toastType} onClose={() => setToast(null)} />
       )}
 
       {selectedEvent && (
@@ -113,9 +141,29 @@ export default function ProfilePage() {
           style={{ animationDelay: "0.1s", animationFillMode: "backwards" }}
         >
           <div className="flex items-center gap-5">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#8b5cf6] to-[#a78bfa] flex items-center justify-center text-white text-2xl font-bold shrink-0">
-              {userName ? userName.charAt(0).toUpperCase() : "U"}
-            </div>
+            {/* Avatar with upload */}
+            <label className="relative cursor-pointer group shrink-0">
+              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#8b5cf6] to-[#a78bfa] flex items-center justify-center text-white text-2xl font-bold overflow-hidden">
+                {avatarUrl ? (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+                ) : (
+                  userName ? userName.charAt(0).toUpperCase() : "U"
+                )}
+              </div>
+              <div className="absolute inset-0 rounded-2xl bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                {uploading ? (
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="17 8 12 3 7 8" />
+                    <line x1="12" y1="3" x2="12" y2="15" />
+                  </svg>
+                )}
+              </div>
+              <input type="file" accept="image/*" onChange={handleAvatarUpload} className="hidden" disabled={uploading} />
+            </label>
             <div className="flex-1 min-w-0">
               <h2 className="text-xl font-bold text-white truncate">
                 {userName || "UniVerse User"}
@@ -123,20 +171,27 @@ export default function ProfilePage() {
               <p className="text-sm text-gray-400 truncate">
                 {userEmail || "user@muj.manipal.edu"}
               </p>
-              <span className="inline-block mt-2 text-xs font-medium px-3 py-1 rounded-full bg-[#8b5cf6]/20 text-[#a78bfa] capitalize">
-                {role === "club_member" ? "Club Member" : role}
-              </span>
+              <div className="flex items-center gap-2 mt-2">
+                <span className="inline-block text-xs font-medium px-3 py-1 rounded-full bg-[#8b5cf6]/20 text-[#a78bfa] capitalize">
+                  {role === "club_member" ? "Club Member" : role}
+                </span>
+                {userPoints > 0 && (
+                  <span className="inline-block text-xs font-medium px-3 py-1 rounded-full bg-[#fbbf24]/15 text-[#fbbf24] border border-[#fbbf24]/25">
+                    ⭐ {userPoints} points
+                  </span>
+                )}
+              </div>
             </div>
           </div>
 
           {/* Quick stats */}
-          <div className="grid grid-cols-2 gap-4 mt-6 pt-6 border-t border-white/5">
+          <div className="grid grid-cols-3 gap-4 mt-6 pt-6 border-t border-white/5">
             <div className="text-center p-3 rounded-xl bg-white/[0.03]">
               <div className="text-2xl font-bold text-white">
                 {registeredEvents.length}
               </div>
               <div className="text-xs text-gray-500 mt-1">
-                Registered Events
+                Registered
               </div>
             </div>
             <div className="text-center p-3 rounded-xl bg-white/[0.03]">
@@ -144,7 +199,15 @@ export default function ProfilePage() {
                 {events.length}
               </div>
               <div className="text-xs text-gray-500 mt-1">
-                Available Events
+                Available
+              </div>
+            </div>
+            <div className="text-center p-3 rounded-xl bg-white/[0.03]">
+              <div className="text-2xl font-bold text-[#fbbf24]">
+                {userPoints}
+              </div>
+              <div className="text-xs text-gray-500 mt-1">
+                Points
               </div>
             </div>
           </div>
@@ -242,6 +305,11 @@ export default function ProfilePage() {
                       {event.venue && (
                         <span className="text-xs text-gray-600 hidden sm:inline">
                           • {event.venue}
+                        </span>
+                      )}
+                      {event.reward_points && event.reward_points > 0 && (
+                        <span className="text-[10px] font-medium text-[#fbbf24] hidden sm:inline">
+                          • +{event.reward_points} pts
                         </span>
                       )}
                     </div>

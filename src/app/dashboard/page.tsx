@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useAppContext, ALL_GENRES, ALL_PRICING, EventGenre, EventPricing } from "@/context/AppContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import Toast from "@/components/Toast";
+import { uploadEventPoster } from "@/lib/services/storage";
 
 function DashboardPageContent() {
   const { clubs, events, addEvent } = useAppContext();
@@ -15,7 +16,11 @@ function DashboardPageContent() {
   const [selectedClub, setSelectedClub] = useState(clubs[0] || "");
   const [genre, setGenre] = useState<EventGenre>(ALL_GENRES[0]);
   const [eventType, setEventType] = useState<EventPricing>(ALL_PRICING[0]);
+  const [rewardPoints, setRewardPoints] = useState(10);
+  const [registrationLimit, setRegistrationLimit] = useState("");
+  const [posterFile, setPosterFile] = useState<File | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [toastType, setToastType] = useState<"success" | "error">("success");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleCreateEvent = async (e: React.FormEvent) => {
@@ -23,29 +28,49 @@ function DashboardPageContent() {
     if (!title.trim() || !description.trim() || !venue.trim() || !date || !selectedClub) return;
 
     setIsSubmitting(true);
-    // Simulate async operation
-    await new Promise((res) => setTimeout(res, 500));
 
-    addEvent({
-      title: title.trim(),
-      description: description.trim(),
-      clubName: selectedClub,
-      date,
-      venue: venue.trim(),
-      genre,
-      eventType,
-    });
+    try {
+      let posterUrl: string | null = null;
 
-    // Clear form
-    setTitle("");
-    setDescription("");
-    setVenue("");
-    setDate("");
-    setSelectedClub(clubs[0] || "");
-    setGenre(ALL_GENRES[0]);
-    setEventType(ALL_PRICING[0]);
-    setIsSubmitting(false);
-    setToast("Event created successfully! 🎉");
+      // Upload poster if provided
+      if (posterFile) {
+        const tempId = `temp-${Date.now()}`;
+        posterUrl = await uploadEventPoster(posterFile, tempId);
+      }
+
+      await addEvent({
+        title: title.trim(),
+        description: description.trim(),
+        clubName: selectedClub,
+        date,
+        venue: venue.trim(),
+        genre,
+        eventType,
+        reward_points: rewardPoints,
+        registration_limit: registrationLimit ? parseInt(registrationLimit) : null,
+        poster_url: posterUrl,
+      });
+
+      // Clear form
+      setTitle("");
+      setDescription("");
+      setVenue("");
+      setDate("");
+      setSelectedClub(clubs[0] || "");
+      setGenre(ALL_GENRES[0]);
+      setEventType(ALL_PRICING[0]);
+      setRewardPoints(10);
+      setRegistrationLimit("");
+      setPosterFile(null);
+      setToastType("success");
+      setToast("Event created successfully! It will appear after admin approval. 🎉");
+    } catch (err) {
+      console.error("Failed to create event:", err);
+      setToastType("error");
+      setToast("Failed to create event. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // Get nearest upcoming events (already sorted by date from context)
@@ -56,7 +81,7 @@ function DashboardPageContent() {
       {toast && (
         <Toast
           message={toast}
-          type="success"
+          type={toastType}
           onClose={() => setToast(null)}
         />
       )}
@@ -88,8 +113,7 @@ function DashboardPageContent() {
             </h1>
           </div>
           <p className="text-gray-500 max-w-xl">
-            Create and manage events for your club. All events will appear on
-            the campus events page.
+            Create and manage events for your club. Events require admin approval before appearing on the campus events page.
           </p>
         </div>
 
@@ -253,6 +277,66 @@ function DashboardPageContent() {
                   </div>
                 </div>
 
+                {/* Reward Points & Registration Limit */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label
+                      htmlFor="event-points"
+                      className="block text-sm font-medium text-gray-300 mb-2"
+                    >
+                      Reward Points
+                    </label>
+                    <input
+                      id="event-points"
+                      type="number"
+                      className="input-field"
+                      placeholder="10"
+                      min={0}
+                      max={100}
+                      value={rewardPoints}
+                      onChange={(e) => setRewardPoints(parseInt(e.target.value) || 0)}
+                    />
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="event-limit"
+                      className="block text-sm font-medium text-gray-300 mb-2"
+                    >
+                      Registration Limit
+                    </label>
+                    <input
+                      id="event-limit"
+                      type="number"
+                      className="input-field"
+                      placeholder="Unlimited"
+                      min={1}
+                      value={registrationLimit}
+                      onChange={(e) => setRegistrationLimit(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                {/* Poster Upload */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Event Poster (optional)
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => setPosterFile(e.target.files?.[0] || null)}
+                      className="input-field file:mr-4 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-[#8b5cf6]/20 file:text-[#a78bfa] hover:file:bg-[#8b5cf6]/30 file:cursor-pointer"
+                    />
+                  </div>
+                  {posterFile && (
+                    <p className="text-xs text-gray-500 mt-1.5">
+                      📎 {posterFile.name} ({(posterFile.size / 1024).toFixed(0)} KB)
+                    </p>
+                  )}
+                </div>
+
                 {/* Preview card */}
                 {title.trim() && (
                   <div className="rounded-xl p-4 bg-[#8b5cf6]/8 border border-[#8b5cf6]/15">
@@ -262,6 +346,10 @@ function DashboardPageContent() {
                     <p className="text-sm text-white font-medium">{title}</p>
                     <p className="text-xs text-gray-400 mt-1">
                       {selectedClub} {date ? `• ${date}` : ""}{venue.trim() ? ` • ${venue.trim()}` : ""}
+                      {rewardPoints > 0 ? ` • ${rewardPoints} pts` : ""}
+                    </p>
+                    <p className="text-[10px] text-gray-600 mt-1">
+                      Status: Pending admin approval
                     </p>
                   </div>
                 )}
@@ -366,6 +454,15 @@ function DashboardPageContent() {
                         <span className="text-xs text-gray-600">
                           {event.date}
                         </span>
+                        {event.status && event.status !== 'approved' && (
+                          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-md ${
+                            event.status === 'pending'
+                              ? 'bg-[#fbbf24]/15 text-[#fbbf24]'
+                              : 'bg-red-400/15 text-red-400'
+                          }`}>
+                            {event.status}
+                          </span>
+                        )}
                       </div>
                     </div>
                   ))}

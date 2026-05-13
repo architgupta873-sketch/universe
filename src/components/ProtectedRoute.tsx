@@ -9,20 +9,28 @@ interface ProtectedRouteProps {
   allowedRole: UserRole;
 }
 
+/**
+ * ProtectedRoute — checks Supabase auth session + profile role.
+ * Redirects to /login if not authenticated or wrong role.
+ * Shows a loading spinner while checking.
+ */
 export default function ProtectedRoute({ children, allowedRole }: ProtectedRouteProps) {
-  const { role } = useAppContext();
+  const { role, isLoading } = useAppContext();
   const router = useRouter();
   const [checked, setChecked] = useState(false);
 
   useEffect(() => {
+    // Wait for auth loading to complete before checking
+    if (isLoading) return;
+
     if (role !== allowedRole) {
       router.replace("/login");
     } else {
       setChecked(true);
     }
-  }, [role, allowedRole, router]);
+  }, [role, allowedRole, router, isLoading]);
 
-  if (!checked) {
+  if (isLoading || !checked) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">

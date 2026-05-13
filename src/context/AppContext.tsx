@@ -1,15 +1,24 @@
 "use client";
 
-import React, { createContext, useContext, useState, ReactNode } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
+import { useAuth } from "@/hooks/useAuth";
+import { useEvents } from "@/hooks/useEvents";
+import { useClubs } from "@/hooks/useClubs";
+import { useRegistrations } from "@/hooks/useRegistrations";
+import { createClub as createClubService } from "@/lib/services/clubs";
+import { createEvent as createEventService, deleteEvent as deleteEventService } from "@/lib/services/events";
+import type { EventWithClub } from "@/lib/services/events";
 
+// ─── Re-export types for backward compatibility ───
+// All existing components import these from "@/context/AppContext"
 export type UserRole = "admin" | "club_member" | "student" | null;
-
 export type EventGenre = "Technical" | "Cultural" | "Fun" | "Sports" | "Workshops" | "Competitions" | "Gaming";
 export type EventPricing = "Free" | "Paid";
 
 export const ALL_GENRES: EventGenre[] = ["Technical", "Cultural", "Fun", "Sports", "Workshops", "Competitions", "Gaming"];
 export const ALL_PRICING: EventPricing[] = ["Free", "Paid"];
 
+// Event interface — same shape as before, but now comes from Supabase
 export interface Event {
   id: string;
   title: string;
@@ -19,240 +28,207 @@ export interface Event {
   venue: string;
   genre: EventGenre;
   eventType: EventPricing;
+  // New fields from Supabase (optional for backward compat)
+  club_id?: string;
+  poster_url?: string | null;
+  reward_points?: number;
+  registration_limit?: number | null;
+  status?: string;
 }
 
+// Context interface — SAME as before
 interface AppContextType {
+  // Auth
   role: UserRole;
   setRole: (role: UserRole) => void;
   userName: string;
   userEmail: string;
+  userId: string | null;
+  userPoints: number;
+  avatarUrl: string | null;
   setUserInfo: (name: string, email: string) => void;
+  isLoading: boolean;
+  authError: string | null;
+
+  // Clubs
   clubs: string[];
+  clubsData: { id: string; name: string; description: string; banner_url: string | null }[];
   addClub: (club: string) => void;
+  refreshClubs: () => Promise<void>;
+
+  // Events
   events: Event[];
   addEvent: (event: Omit<Event, "id">) => void;
   deleteEvent: (eventId: string) => void;
+  refreshEvents: () => Promise<void>;
+
+  // Registrations
   registeredEventIds: string[];
   registerForEvent: (eventId: string) => void;
   unregisterFromEvent: (eventId: string) => void;
+
+  // Auth actions
   logout: () => void;
+  handleSignIn: (email: string, password: string) => Promise<void>;
+  handleSignUp: (email: string, password: string, fullName: string, role: "admin" | "club_member" | "student") => Promise<void>;
+  refreshProfile: () => Promise<void>;
 }
-
-const INITIAL_CLUBS = [
-  "ACM",
-  "IEEE",
-  "Cinephilia",
-  "Randomize()",
-  "Shabd",
-  "Coreographia",
-  "Glitch",
-];
-
-const INITIAL_EVENTS: Event[] = [
-  {
-    id: "evt-1",
-    title: "Hackathon 2026",
-    description:
-      "48-hour coding marathon with exciting prizes. Build innovative solutions and collaborate with fellow developers.",
-    clubName: "ACM",
-    date: "2026-04-20",
-    venue: "Main Auditorium, Block A",
-    genre: "Competitions",
-    eventType: "Free",
-  },
-  {
-    id: "evt-2",
-    title: "TechTalk: AI & Future",
-    description:
-      "An insightful talk on the future of artificial intelligence, covering LLMs, robotics, and ethical AI.",
-    clubName: "IEEE",
-    date: "2026-04-25",
-    venue: "Seminar Hall 3, Block C",
-    genre: "Technical",
-    eventType: "Free",
-  },
-  {
-    id: "evt-3",
-    title: "Film Screening Night",
-    description:
-      "Join us for a curated selection of award-winning short films followed by a panel discussion on cinematography.",
-    clubName: "Cinephilia",
-    date: "2026-04-18",
-    venue: "Mini Theatre, Student Centre",
-    genre: "Cultural",
-    eventType: "Paid",
-  },
-  {
-    id: "evt-4",
-    title: "Code Golf Championship",
-    description:
-      "Solve challenges in the fewest characters possible. Test your ability to write concise, elegant code.",
-    clubName: "Randomize()",
-    date: "2026-05-02",
-    venue: "Computer Lab 5, Block D",
-    genre: "Competitions",
-    eventType: "Free",
-  },
-  {
-    id: "evt-5",
-    title: "Open Mic Poetry",
-    description:
-      "Express yourself through poetry and spoken word. All languages welcome. Share your stories with the campus.",
-    clubName: "Shabd",
-    date: "2026-04-22",
-    venue: "Open Air Theatre",
-    genre: "Cultural",
-    eventType: "Free",
-  },
-  {
-    id: "evt-6",
-    title: "Dance Showcase: Rhythms",
-    description:
-      "Annual dance showcase featuring performances from classical to hip-hop. Come witness stunning choreography.",
-    clubName: "Coreographia",
-    date: "2026-05-05",
-    venue: "Main Auditorium, Block A",
-    genre: "Cultural",
-    eventType: "Paid",
-  },
-  {
-    id: "evt-7",
-    title: "Valorant Campus Cup",
-    description:
-      "5v5 Valorant tournament with live commentary. Assemble your squad and compete for the campus champion title.",
-    clubName: "Glitch",
-    date: "2026-04-27",
-    venue: "Gaming Arena, Block E",
-    genre: "Gaming",
-    eventType: "Free",
-  },
-  {
-    id: "evt-8",
-    title: "Web Dev Bootcamp",
-    description:
-      "Intensive 2-day workshop covering React, Next.js, and modern deployment. Perfect for beginners and intermediates.",
-    clubName: "ACM",
-    date: "2026-05-10",
-    venue: "Computer Lab 2, Block D",
-    genre: "Workshops",
-    eventType: "Paid",
-  },
-  {
-    id: "evt-9",
-    title: "Cipher: CTF Challenge",
-    description:
-      "Capture The Flag cybersecurity competition. Crack puzzles, exploit vulnerabilities, and prove your skills.",
-    clubName: "IEEE",
-    date: "2026-05-08",
-    venue: "Seminar Hall 1, Block C",
-    genre: "Competitions",
-    eventType: "Free",
-  },
-  {
-    id: "evt-10",
-    title: "Music Jam Night",
-    description:
-      "Unplug and unwind with live indie and acoustic performances by student artists. Bring your instruments!",
-    clubName: "Shabd",
-    date: "2026-05-12",
-    venue: "Open Air Theatre",
-    genre: "Cultural",
-    eventType: "Free",
-  },
-  {
-    id: "evt-11",
-    title: "Git & GitHub Workshop",
-    description:
-      "Master version control from scratch. Learn branching, merging, pull requests, and collaborative workflows.",
-    clubName: "Randomize()",
-    date: "2026-04-30",
-    venue: "Computer Lab 3, Block D",
-    genre: "Workshops",
-    eventType: "Free",
-  },
-  {
-    id: "evt-12",
-    title: "FIFA Showdown",
-    description:
-      "1v1 FIFA tournament on PS5. Bracket-style elimination with live stream. Walk-ins welcome until slots fill up.",
-    clubName: "Glitch",
-    date: "2026-05-15",
-    venue: "Gaming Arena, Block E",
-    genre: "Gaming",
-    eventType: "Paid",
-  },
-  {
-    id: "evt-13",
-    title: "Documentary Premiere",
-    description:
-      "Screening of student-produced documentaries exploring social issues. Q&A with filmmakers after the show.",
-    clubName: "Cinephilia",
-    date: "2026-05-03",
-    venue: "Mini Theatre, Student Centre",
-    genre: "Cultural",
-    eventType: "Free",
-  },
-  {
-    id: "evt-14",
-    title: "Intro to ML Workshop",
-    description:
-      "Hands-on workshop covering machine learning fundamentals with Python, scikit-learn, and real datasets.",
-    clubName: "IEEE",
-    date: "2026-05-18",
-    venue: "Computer Lab 1, Block D",
-    genre: "Technical",
-    eventType: "Paid",
-  },
-];
-
-const sortByDate = (list: Event[]) =>
-  [...list].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
+/** Convert Supabase event to the frontend Event interface */
+function toFrontendEvent(e: EventWithClub): Event {
+  return {
+    id: e.id,
+    title: e.title,
+    description: e.description,
+    clubName: e.clubName,
+    date: e.date,
+    venue: e.venue,
+    genre: e.genre as EventGenre,
+    eventType: e.event_type as EventPricing,
+    club_id: e.club_id,
+    poster_url: e.poster_url,
+    reward_points: e.reward_points,
+    registration_limit: e.registration_limit,
+    status: e.status,
+  };
+}
+
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [role, setRole] = useState<UserRole>(null);
-  const [userName, setUserName] = useState("");
-  const [userEmail, setUserEmail] = useState("");
-  const [clubs, setClubs] = useState<string[]>(INITIAL_CLUBS);
-  const [events, setEvents] = useState<Event[]>(() => sortByDate(INITIAL_EVENTS));
-  const [registeredEventIds, setRegisteredEventIds] = useState<string[]>([]);
+  const auth = useAuth();
+  const eventsHook = useEvents();
+  const clubsHook = useClubs();
+  const regsHook = useRegistrations(auth.user?.id || null);
 
-  const setUserInfo = (name: string, email: string) => {
-    setUserName(name);
-    setUserEmail(email);
-  };
+  // Derive role from profile (null if not logged in)
+  const role: UserRole = auth.profile?.role || null;
 
-  const addClub = (club: string) => {
-    setClubs((prev) => [...prev, club]);
-  };
+  // Derive user info
+  const userName = auth.profile?.full_name || "";
+  const userEmail = auth.profile?.email || auth.user?.email || "";
+  const userId = auth.user?.id || null;
+  const userPoints = auth.profile?.points || 0;
+  const avatarUrl = auth.profile?.avatar_url || null;
 
-  const addEvent = (event: Omit<Event, "id">) => {
-    const newEvent: Event = {
-      ...event,
-      id: `evt-${Date.now()}`,
-    };
-    setEvents((prev) => sortByDate([...prev, newEvent]));
-  };
+  // Convert events to frontend format
+  const [events, setEvents] = useState<Event[]>([]);
+  useEffect(() => {
+    setEvents(eventsHook.events.map(toFrontendEvent));
+  }, [eventsHook.events]);
 
-  const deleteEvent = (eventId: string) => {
-    setEvents((prev) => prev.filter((e) => e.id !== eventId));
-    setRegisteredEventIds((prev) => prev.filter((id) => id !== eventId));
-  };
+  // Club names for backward compat (the original context only stored string[])
+  const clubs = clubsHook.clubNames;
+  const clubsData = clubsHook.clubs.map((c) => ({
+    id: c.id,
+    name: c.name,
+    description: c.description || '',
+    banner_url: c.banner_url,
+  }));
 
-  const registerForEvent = (eventId: string) => {
-    setRegisteredEventIds((prev) => [...prev, eventId]);
-  };
+  // ── Action handlers ──────────────────────────────────
 
-  const unregisterFromEvent = (eventId: string) => {
-    setRegisteredEventIds((prev) => prev.filter((id) => id !== eventId));
-  };
+  // setRole — no-op in Supabase mode (role comes from DB profile)
+  const setRole = useCallback(() => {
+    // Role is determined by the profile in Supabase, not set manually
+  }, []);
 
-  const logout = () => {
-    setRole(null);
-    setUserName("");
-    setUserEmail("");
-  };
+  // setUserInfo — no-op in Supabase mode (info comes from profile)
+  const setUserInfo = useCallback(() => {
+    // User info comes from Supabase profile
+  }, []);
+
+  // addClub — calls Supabase, then refreshes
+  const addClub = useCallback(
+    async (clubName: string) => {
+      try {
+        await createClubService(clubName);
+        await clubsHook.refetch();
+      } catch (err) {
+        console.error("Failed to add club:", err);
+      }
+    },
+    [clubsHook]
+  );
+
+  // addEvent — calls Supabase, then refreshes
+  const addEvent = useCallback(
+    async (event: Omit<Event, "id">) => {
+      try {
+        // Find club_id from club name
+        const club = clubsHook.clubs.find((c) => c.name === event.clubName);
+        if (!club) {
+          console.error("Club not found:", event.clubName);
+          return;
+        }
+
+        await createEventService({
+          title: event.title,
+          description: event.description,
+          club_id: club.id,
+          venue: event.venue,
+          date: event.date,
+          genre: event.genre,
+          event_type: event.eventType,
+          reward_points: event.reward_points || 10,
+          registration_limit: event.registration_limit || null,
+          poster_url: event.poster_url || null,
+          created_by: userId,
+        });
+        await eventsHook.refetch();
+      } catch (err) {
+        console.error("Failed to create event:", err);
+      }
+    },
+    [clubsHook.clubs, userId, eventsHook]
+  );
+
+  // deleteEvent — calls Supabase, then refreshes
+  const deleteEvent = useCallback(
+    async (eventId: string) => {
+      try {
+        await deleteEventService(eventId);
+        await eventsHook.refetch();
+      } catch (err) {
+        console.error("Failed to delete event:", err);
+      }
+    },
+    [eventsHook]
+  );
+
+  // registerForEvent — calls Supabase hook (with optimistic update)
+  const registerForEvent = useCallback(
+    async (eventId: string) => {
+      try {
+        await regsHook.registerForEvent(eventId);
+        // Refresh profile to get updated points
+        await auth.refreshProfile();
+      } catch (err) {
+        console.error("Failed to register:", err);
+      }
+    },
+    [regsHook, auth]
+  );
+
+  // unregisterFromEvent
+  const unregisterFromEvent = useCallback(
+    async (eventId: string) => {
+      try {
+        await regsHook.unregisterFromEvent(eventId);
+        await auth.refreshProfile();
+      } catch (err) {
+        console.error("Failed to unregister:", err);
+      }
+    },
+    [regsHook, auth]
+  );
+
+  // logout — calls Supabase signOut
+  const logout = useCallback(async () => {
+    await auth.handleSignOut();
+  }, [auth]);
+
+  const isLoading = auth.loading || eventsHook.loading || clubsHook.loading;
 
   return (
     <AppContext.Provider
@@ -261,16 +237,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setRole,
         userName,
         userEmail,
+        userId,
+        userPoints,
+        avatarUrl,
         setUserInfo,
+        isLoading,
+        authError: auth.error,
         clubs,
+        clubsData,
         addClub,
+        refreshClubs: clubsHook.refetch,
         events,
         addEvent,
         deleteEvent,
-        registeredEventIds,
+        refreshEvents: eventsHook.refetch,
+        registeredEventIds: regsHook.registeredEventIds,
         registerForEvent,
         unregisterFromEvent,
         logout,
+        handleSignIn: auth.handleSignIn,
+        handleSignUp: auth.handleSignUp,
+        refreshProfile: auth.refreshProfile,
       }}
     >
       {children}

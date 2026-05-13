@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 
 export default function Navbar() {
-  const { role, logout } = useAppContext();
+  const { role, logout, userName, userPoints } = useAppContext();
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -63,9 +63,20 @@ export default function Navbar() {
 
             {role ? (
               <div className="flex items-center gap-3 ml-4 pl-4 border-l border-white/10">
+                {/* Points badge for students */}
+                {role === "student" && userPoints > 0 && (
+                  <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-[#fbbf24]/15 text-[#fbbf24] border border-[#fbbf24]/25">
+                    ⭐ {userPoints} pts
+                  </span>
+                )}
                 <span className="text-xs font-medium px-3 py-1.5 rounded-full bg-[#8b5cf6]/20 text-[#a78bfa] capitalize">
                   {role === "club_member" ? "Club Member" : role}
                 </span>
+                {userName && (
+                  <span className="text-xs text-gray-500 hidden lg:inline truncate max-w-[100px]">
+                    {userName}
+                  </span>
+                )}
                 <button
                   onClick={logout}
                   className="text-sm text-gray-400 hover:text-red-400 transition-colors font-medium"
